@@ -1,0 +1,68 @@
+#!/usr/bin/env python3
+
+import rospy
+from duckietown_msgs.msg import Twist2DStamped
+from duckietown_msgs.msg import AprilTagDetectionArray
+
+class TargetFollower:
+    def _init_(self):
+        rospy.init_node('target_follower_node', anonymous=True)
+        rospy.on_shutdown(self.clean_shutdown)
+        
+        self.cmd_vel_pub = rospy.Publisher('/<YOUR_ROBOT_NAME>/car_cmd_switch_node/cmd', Twist2DStamped, queue_size=1)
+        rospy.Subscriber('/<YOUR_ROBOT_NAME>/apriltag_detector_node/detections', AprilTagDetectionArray, self.tag_callback, queue_size=1)
+        
+        self.target_detected = False
+        self.target_lost_count = 0
+        self.max_lost_count = 10  # Adjust as needed
+        
+        rospy.spin()
+
+    def tag_callback(self, msg):
+        if len(msg.detections) > 0:
+            self.target_detected = True
+            self.target_lost_count = 0
+            self.move_robot(msg.detections)
+        else:
+            self.target_lost_count += 1
+            if self.target_lost_count >= self.max_lost_count:
+                self.target_detected = False
+                self.seek_object()
+
+    def seek_object(self):
+        # Implement your "Seek an object" behavior here
+        cmd_msg = Twist2DStamped()
+        cmd_msg.header.stamp = rospy.Time.now()
+        cmd_msg.v = 0.0
+        cmd_msg.omega = 0.5  # Rotate at a constant angular velocity
+        self.cmd_vel_pub.publish(cmd_msg)
+
+    def move_robot(self, detections):
+        # Implement your "Look at the Object" behavior here
+        if len(detections) == 0:
+            return
+
+        # Assuming only one detection is present
+        tag_pose = detections[0].pose.pose.pose
+        tag_x = tag_pose.position.x
+        tag_y = tag_pose.position.y
+
+        # Perform actions to keep the tag in the center of the camera view
+        # You may need to adjust the control logic based on your robot's kinematics
+
+    def clean_shutdown(self):
+        rospy.loginfo("System shutting down. Stopping robot...")
+        self.stop_robot()
+
+    def stop_robot(self):
+        cmd_msg = Twist2DStamped()
+        cmd_msg.header.stamp = rospy.Time.now()
+        cmd_msg.v = 0.0
+        cmd_msg.omega = 0.0
+        self.cmd_vel_pub.publish(cmd_msg)
+
+if _name_ == '_main_':
+    try:
+        target_follower = TargetFollower()
+    except rospy.ROSInterruptException:
+        pass
